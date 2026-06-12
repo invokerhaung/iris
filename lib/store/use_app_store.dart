@@ -134,6 +134,11 @@ class AppStore extends PersistentStore<AppState> {
     await save(state);
   }
 
+  Future<void> updateCurrentTab(int index) async {
+    set(state.copyWith(currentTab: index));
+    await save(state);
+  }
+
   @override
   Future<AppState?> load() async {
     logger('Loading AppState');

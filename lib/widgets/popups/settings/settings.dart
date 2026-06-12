@@ -17,9 +17,11 @@ class ITab {
 }
 
 class Settings extends HookWidget {
-  const Settings({super.key});
+  const Settings({super.key, this.onClose});
 
   static const title = 'Settings';
+
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +74,7 @@ class Settings extends HookWidget {
                 IconButton(
                   tooltip: '${t.close} ( Escape )',
                   icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: onClose ?? () => Navigator.of(context).pop(),
                 ),
               ],
             ),

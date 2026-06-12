@@ -23,9 +23,11 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class Files extends HookWidget {
-  const Files({super.key, required this.storage});
+  const Files({super.key, required this.storage, this.onPlay, this.onClose});
 
   final Storage storage;
+  final VoidCallback? onPlay;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +110,11 @@ class Files extends HookWidget {
       await useAppStore().updateAutoPlay(true);
       await useAppStore().updateShuffle(false);
       await usePlayQueueStore().update(playQueue: playQueue, index: newIndex);
+
+      if (onPlay != null) {
+        onPlay!();
+        return;
+      }
     }
 
     void back() {
@@ -299,7 +306,9 @@ class Files extends HookWidget {
                                           files[index].type ==
                                               ContentType.audio) {
                                         play(files, index);
-                                        Navigator.pop(context);
+                                        if (onPlay == null) {
+                                          Navigator.pop(context);
+                                        }
                                       }
                                     }
                                   },
@@ -475,7 +484,7 @@ class Files extends HookWidget {
               IconButton(
                 tooltip: '${t.close} ( Escape )',
                 icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: onClose ?? () => Navigator.of(context).pop(),
               ),
             ],
           ),

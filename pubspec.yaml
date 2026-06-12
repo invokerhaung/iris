@@ -18,9 +18,9 @@ dependencies:
   flutter_hooks: ^0.21.3+1
   flutter_secure_storage: ^8.1.0
   flutter_zustand: ^0.0.5
-  media_kit: ^1.2.0
-  media_kit_video: ^1.3.0
-  media_kit_libs_video: ^1.0.6
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
   path: ^1.9.1
   path_provider: ^2.1.5
   package_info_plus: ^9.0.0
@@ -53,13 +53,9 @@ dependencies:
   popover: ^0.3.1
   pure_ftp: ^0.7.5
   drives_windows:
-    git:
-      url: https://github.com/nini22P/drives_windows
-      ref: main
+    path: 3rdparty/drives_windows
   media_stream:
-    git:
-      url: https://github.com/nini22P/media_stream
-      ref: main
+    path: 3rdparty/media_stream
 
 dev_dependencies:
   flutter_test:

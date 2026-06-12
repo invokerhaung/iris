@@ -8,7 +8,7 @@ import 'package:flutter_zustand/flutter_zustand.dart';
 import 'package:iris/info.dart';
 import 'package:iris/l10n/app_localizations.dart';
 import 'package:iris/models/file.dart';
-import 'package:iris/pages/home/home.dart';
+import 'package:iris/pages/shell/shell.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/theme.dart';
@@ -147,7 +147,7 @@ class MyApp extends HookWidget {
         theme: theme.light,
         darkTheme: theme.dark,
         themeMode: themeMode,
-        home: const Home(),
+        home: const Shell(),
         locale: language == 'system' || language == 'auto'
             ? null
             : Locale(language),

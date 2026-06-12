@@ -26,7 +26,10 @@ class ITab {
 }
 
 class Storages extends HookWidget {
-  const Storages({super.key});
+  const Storages({super.key, this.onPlay, this.onClose});
+
+  final VoidCallback? onPlay;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +45,7 @@ class Storages extends HookWidget {
     final tabController = useTabController(initialLength: tabs.length);
 
     return currentStorage != null
-        ? Files(storage: currentStorage)
+        ? Files(storage: currentStorage, onPlay: onPlay, onClose: onClose)
         : Column(
             children: [
               Expanded(
