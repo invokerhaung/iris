@@ -109,3 +109,8 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 
 # Install iris-updater.bat
 install(FILES "${CMAKE_SOURCE_DIR}/iris-updater.bat" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
+
+# Install legado_ffi.dll (Go FFI 解析引擎)
+install(FILES "${CMAKE_SOURCE_DIR}/../ffi_lib/legado_ffi.dll"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)

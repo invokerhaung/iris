@@ -53,7 +53,8 @@ abstract class AppState with _$AppState {
     @Default(SortOrder.asc) SortOrder sortOrder,
     @Default(true) bool folderFirst,
     @Default(ScreenOrientation.device) ScreenOrientation orientation,
-    @Default(1) int currentTab,
+    @Default(0) int currentTab,
+    @Default(false) bool showPlayer,
   }) = _AppState;
 
   factory AppState.fromJson(Map<String, dynamic> json) =>

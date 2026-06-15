@@ -35,7 +35,10 @@ dependencies:
   uuid: ^4.5.1
   flutter_markdown: ^0.7.7+1
   http: ^1.5.0
+  ffi: ^2.1.4
   collection: ^1.19.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
   json_annotation: ^4.9.0
   freezed_annotation: ^3.1.0
   disks_desktop: ^1.0.1

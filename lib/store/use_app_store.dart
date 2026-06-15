@@ -139,6 +139,10 @@ class AppStore extends PersistentStore<AppState> {
     await save(state);
   }
 
+  Future<void> updateShowPlayer(bool show) async {
+    set(state.copyWith(showPlayer: show));
+  }
+
   @override
   Future<AppState?> load() async {
     logger('Loading AppState');

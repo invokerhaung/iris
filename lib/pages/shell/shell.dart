@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_zustand/flutter_zustand.dart';
-import 'package:iris/pages/files/files_page.dart';
+import 'package:iris/pages/home/home_page.dart';
 import 'package:iris/pages/player/player_view.dart';
 import 'package:iris/pages/settings/settings_page.dart';
+import 'package:iris/pages/sources/sources_page.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/utils/get_localizations.dart';
 
@@ -17,6 +18,8 @@ class Shell extends HookWidget {
         useAppStore().select(context, (state) => state.currentTab);
     final playerBackend =
         useAppStore().select(context, (state) => state.playerBackend);
+    final showPlayer =
+        useAppStore().select(context, (state) => state.showPlayer);
 
     final destinations = [
       NavigationDestination(
@@ -25,9 +28,9 @@ class Shell extends HookWidget {
         label: t.files,
       ),
       NavigationDestination(
-        icon: const Icon(Icons.play_circle_outline_rounded),
-        selectedIcon: const Icon(Icons.play_circle_filled_rounded),
-        label: t.play,
+        icon: const Icon(Icons.cloud_outlined),
+        selectedIcon: const Icon(Icons.cloud_rounded),
+        label: t.sources,
       ),
       NavigationDestination(
         icon: const Icon(Icons.settings_outlined),
@@ -36,21 +39,65 @@ class Shell extends HookWidget {
       ),
     ];
 
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.black,
+          body: IndexedStack(
+            index: currentTab,
+            children: const [
+              HomePage(),
+              SourcesPage(),
+              SettingsPage(),
+            ],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: currentTab,
+            onDestinationSelected: (index) =>
+                useAppStore().updateCurrentTab(index),
+            destinations: destinations,
+          ),
+        ),
+        // Player overlay — only shown when user explicitly plays a file
+        if (showPlayer)
+          Positioned.fill(
+            child: _PlayerOverlay(
+              playerBackend: playerBackend,
+              onClose: () => useAppStore().updateShowPlayer(false),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PlayerOverlay extends HookWidget {
+  const _PlayerOverlay({
+    required this.playerBackend,
+    required this.onClose,
+  });
+
+  final dynamic playerBackend;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: IndexedStack(
-        index: currentTab,
+      body: Stack(
         children: [
-          const FilesPage(),
           PlayerView(playerBackend: playerBackend),
-          const SettingsPage(),
+          // Close button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded,
+                  color: Colors.white, size: 28),
+              onPressed: onClose,
+            ),
+          ),
         ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentTab,
-        onDestinationSelected: (index) =>
-            useAppStore().updateCurrentTab(index),
-        destinations: destinations,
       ),
     );
   }
