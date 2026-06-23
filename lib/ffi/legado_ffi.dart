@@ -15,43 +15,13 @@
 
 library;
 
+import 'dart:convert';
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'legado_ffi_bindings.dart';
 
 /// 底层绑定实例，全局唯一
 final _bindings = LegadoFFIBindings.instance;
-
-// ============================================================
-// LegadoLog — 日志子系统
-// ============================================================
-
-/// 日志管理
-///
-/// 控制 legado FFI 库的日志输出。日志写入文件，格式为：
-/// ```
-/// [LEGADO] 2024/01/01 12:00:00 [INFO] message
-/// ```
-class LegadoLog {
-  /// 初始化日志系统
-  ///
-  /// [path] 日志文件路径，如 `'legado_ffi.log'`。
-  static void init(String path) {
-    final ptr = path.toNativeUtf8();
-    _bindings.logInit(ptr);
-    malloc.free(ptr);
-  }
-
-  /// 启用或禁用日志
-  static void setEnabled(bool enabled) {
-    _bindings.logSetEnabled(enabled ? 1 : 0);
-  }
-
-  /// 关闭日志文件
-  static void close() {
-    _bindings.logClose();
-  }
-}
 
 // ============================================================
 // LegadoAnalyzer — 内容解析引擎
@@ -336,5 +306,58 @@ class LegadoURL {
   void dispose() {
     _finalizer.detach(this);
     _bindings.urlFree(_id);
+  }
+}
+
+// ============================================================
+// LegadoAnalyzer 扩展方法
+// ============================================================
+
+/// LegadoAnalyzer 扩展方法
+extension LegadoAnalyzerExtension on LegadoAnalyzer {
+  /// 提取文本（支持 @ 语法）
+  String? extractText(String rule) {
+    if (rule.isEmpty) return null;
+
+    try {
+      // 处理 @ 语法
+      if (rule.contains('@')) {
+        final parts = rule.split('@');
+        final selector = parts[0];
+        final attr = parts.length > 1 ? parts[1] : 'text';
+
+        if (attr == 'text') {
+          return getString(selector);
+        } else {
+          final element = getElement(selector);
+          if (element.isEmpty) return null;
+          // 从元素中提取属性
+          final regex = RegExp('$attr=["\']([^"\']*)["\']');
+          final match = regex.firstMatch(element);
+          return match?.group(1);
+        }
+      }
+
+      return getString(rule);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 提取布尔值
+  bool extractBool(String rule) {
+    final text = extractText(rule);
+    if (text == null) return false;
+    return text.toLowerCase() == 'true' || text == '1';
+  }
+
+  /// 提取列表文本
+  List<String> extractStringList(String rule) {
+    try {
+      final jsonStr = getStringList(rule);
+      return (jsonDecode(jsonStr) as List).cast<String>();
+    } catch (e) {
+      return [];
+    }
   }
 }

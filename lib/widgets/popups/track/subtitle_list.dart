@@ -7,7 +7,6 @@ import 'package:iris/models/player.dart';
 import 'package:iris/models/storages/storage.dart';
 import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/utils/get_localizations.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_stream/media_stream.dart';
 import 'package:provider/provider.dart';
@@ -69,7 +68,6 @@ class SubtitleList extends HookWidget {
               ),
               tileColor: isActive ? Theme.of(context).hoverColor : null,
               onTap: () {
-                logger('Set subtitle: ${subtitle.id}');
                 player.player.setSubtitleTrack(subtitle);
                 Navigator.of(context).pop();
               },
@@ -81,7 +79,6 @@ class SubtitleList extends HookWidget {
                   style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant)),
               onTap: () {
-                logger('Set external subtitle: $subtitle');
                 final mediaStream = MediaStream();
                 final uri = file?.storageType == StorageType.ftp
                     ? '${mediaStream.url}/${subtitle.uri}'
@@ -113,7 +110,6 @@ class SubtitleList extends HookWidget {
                 : null,
             title: Text(t.off),
             onTap: () {
-              logger('Set subtitle: ${t.off}');
               player.externalSubtitle.value = null;
               player.controller.setSubtitleTracks([]);
               Navigator.of(context).pop();

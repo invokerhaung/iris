@@ -37,31 +37,6 @@ class LegadoFFIBindings {
   late final DynamicLibrary _dylib = DynamicLibrary.open('legado_ffi.dll');
 
   // ============================================================
-  // Log — 日志子系统（3 个函数）
-  // ============================================================
-
-  /// 初始化日志文件
-  ///
-  /// C 签名: `void LogInit(char* path)`
-  late final void Function(Pointer<Utf8> path) logInit =
-      _dylib.lookupFunction<Void Function(Pointer<Utf8>),
-          void Function(Pointer<Utf8>)>('LogInit');
-
-  /// 启用或禁用日志
-  ///
-  /// C 签名: `void LogSetEnabled(int enabled)`
-  /// [enabled] 非 0 为启用，0 为禁用。
-  late final void Function(int enabled) logSetEnabled =
-      _dylib.lookupFunction<Void Function(Int32), void Function(int)>(
-          'LogSetEnabled');
-
-  /// 关闭日志文件
-  ///
-  /// C 签名: `void LogClose(void)`
-  late final void Function() logClose =
-      _dylib.lookupFunction<Void Function(), void Function()>('LogClose');
-
-  // ============================================================
   // Analyzer — 内容解析引擎（8 个函数）
   //
   // 实例通过 [analyzerNew] 创建，返回一个 int64 ID。

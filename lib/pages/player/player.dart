@@ -19,7 +19,6 @@ import 'package:iris/pages/player/overlays/minimal_progress_overlay.dart';
 import 'package:iris/pages/player/video_view.dart';
 import 'package:iris/store/use_player_ui_store.dart';
 import 'package:iris/utils/check_content_type.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/store/use_play_queue_store.dart';
@@ -127,7 +126,7 @@ class Player extends HookWidget {
         await callback;
         showControl();
       } catch (e) {
-        logger(e.toString());
+        // ignore
       }
     }
 

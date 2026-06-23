@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
 ValueNotifier<double?> useBrightness(bool isGesture) {
@@ -13,7 +12,7 @@ ValueNotifier<double?> useBrightness(bool isGesture) {
         brightness.value = await ScreenBrightness.instance.application;
       }();
     } catch (e) {
-      logger('Error getting brightness: $e');
+      // ignore
     }
     return () => brightness.value = null;
   }, [isGesture]);
@@ -25,7 +24,7 @@ ValueNotifier<double?> useBrightness(bool isGesture) {
             .setApplicationScreenBrightness(brightness.value!);
       }
     } catch (e) {
-      logger('Error setting brightness: $e');
+      // ignore
     }
     return;
   }, [brightness.value]);
@@ -36,7 +35,7 @@ ValueNotifier<double?> useBrightness(bool isGesture) {
       try {
         ScreenBrightness.instance.resetApplicationScreenBrightness();
       } catch (e) {
-        logger('Error resetting brightness: $e');
+        // ignore
       }
     },
     [],

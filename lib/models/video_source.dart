@@ -1,12 +1,8 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:iris/models/source_rule.dart';
 
 part 'video_source.freezed.dart';
 part 'video_source.g.dart';
-
-enum SourceType {
-  maccms,
-  universal,
-}
 
 enum SourceStatus {
   active,
@@ -16,12 +12,12 @@ enum SourceStatus {
 
 /// 源排序方式
 enum SourceSortBy {
-  weight, // 按权重
-  name, // 按名称
-  apiUrl, // 按 URL
-  lastUpdateTime, // 按更新时间
-  respondTime, // 按响应时间
-  status, // 按状态
+  weight,
+  name,
+  apiUrl,
+  lastUpdateTime,
+  respondTime,
+  status,
 }
 
 @freezed
@@ -30,7 +26,6 @@ abstract class VideoSource with _$VideoSource {
     required String id,
     required String name,
     required String apiUrl,
-    @Default(SourceType.maccms) SourceType type,
     String? jiexiUrl,
     @Default(false) bool isNsfw,
     @Default(SourceStatus.active) SourceStatus status,
@@ -40,6 +35,7 @@ abstract class VideoSource with _$VideoSource {
     String? comment,
     @Default(0) int lastUpdateTime,
     @Default(0) int respondTime,
+    @Default(SourceRule()) SourceRule rule,
   }) = _VideoSource;
 
   factory VideoSource.fromJson(Map<String, dynamic> json) =>

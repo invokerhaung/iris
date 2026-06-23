@@ -1,1063 +1,902 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_zustand/flutter_zustand.dart';
-import 'package:iris/models/source_subscription.dart';
-import 'package:iris/models/video_source.dart';
-import 'package:iris/pages/sources/source_edit_page.dart';
-import 'package:iris/store/use_source_store.dart';
-import 'package:iris/utils/get_localizations.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 
+import '../../models/book_source.dart';
+import '../../models/book_source_part.dart';
+import '../../models/book_source_sort.dart';
+import '../../store/use_source_store.dart';
+import 'source_edit_page.dart';
+import 'widgets/source_tile.dart';
+import 'widgets/source_filter_bar.dart';
+import 'widgets/source_batch_bar.dart';
+import 'widgets/source_sort_menu.dart';
+import 'widgets/subscription_dialog.dart';
+import 'widgets/group_dialog.dart';
+
+/// 源管理主页面
 class SourcesPage extends HookWidget {
   const SourcesPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final t = getLocalizations(context);
-    final colorScheme = Theme.of(context).colorScheme;
-    final sources =
-        useSourceStore().select(context, (state) => state.sources);
-    final currentSourceIndex =
-        useSourceStore().select(context, (state) => state.currentSourceIndex);
-    final groups =
-        useSourceStore().select(context, (state) => state.groups);
-    final sortBy =
-        useSourceStore().select(context, (state) => state.sortBy);
-    final sortAscending =
-        useSourceStore().select(context, (state) => state.sortAscending);
-    final subscriptions =
-        useSourceStore().select(context, (state) => state.subscriptions);
+    final store = useSourceStore();
+    final sources = store.select(context, (s) => s.sources);
+    final groups = store.select(context, (s) => s.groups);
 
-    final nameController = useTextEditingController();
-    final urlController = useTextEditingController();
-    final selectedType = useState(SourceType.maccms);
-    final selectedGroup = useState('');
+    // 多选状态
+    final selectedUrls = useState<Set<String>>({});
+    final isMultiSelectMode = useState(false);
 
-    // 搜索与筛选状态
-    final searchQuery = useState('');
-    final filterStatus = useState<SourceStatus?>(null);
-    final filterGroup = useState<String?>(null);
+    // 筛选状态
+    final currentFilter = useState(0); // 0全部 1活跃 2禁用 3错误
+    final currentGroup = useState<String?>(null);
+    final currentType = useState<int?>(null);
+    final searchKeyword = useState('');
 
-    // 测试状态
-    final isTesting = useState(false);
-    final testingIndex = useState<int?>(null);
+    // 搜索控制器
+    final searchController = useTextEditingController();
+    final isSearchExpanded = useState(false);
 
-    // 收集所有已使用的分组（含源中使用的）
-    final allGroups = useMemoized(() {
-      final fromSources =
-          sources.map((s) => s.group).where((g) => g.isNotEmpty);
-      return {...groups, ...fromSources}.toList()..sort();
-    }, [sources, groups]);
-
-    // 根据搜索和筛选条件过滤源列表
+    // 计算筛选后的源列表
     final filteredSources = useMemoized(() {
-      // 先排序
-      var result = useSourceStore().getSortedSources();
-      // 关键词搜索
-      final query = searchQuery.value.trim().toLowerCase();
-      if (query.isNotEmpty) {
-        result = result.where((s) {
-          return s.name.toLowerCase().contains(query) ||
-              s.apiUrl.toLowerCase().contains(query) ||
-              (s.comment?.toLowerCase().contains(query) ?? false);
-        }).toList();
+      var sourceParts = store.getSortedSourceParts();
+
+      // 搜索筛选
+      if (searchKeyword.value.isNotEmpty) {
+        sourceParts = store.searchSources(searchKeyword.value);
       }
+
       // 状态筛选
-      if (filterStatus.value != null) {
-        result = result.where((s) => s.status == filterStatus.value).toList();
+      switch (currentFilter.value) {
+        case 1: // 活跃
+          sourceParts = sourceParts.where((s) => s.isActive).toList();
+          break;
+        case 2: // 禁用
+          sourceParts = sourceParts.where((s) => s.isDisabled).toList();
+          break;
+        case 3: // 错误
+          sourceParts = sourceParts.where((s) => s.isError).toList();
+          break;
       }
+
       // 分组筛选
-      if (filterGroup.value != null) {
-        result = result.where((s) => s.group == filterGroup.value).toList();
+      if (currentGroup.value != null) {
+        sourceParts = sourceParts.where((s) => s.hasGroup(currentGroup.value!)).toList();
       }
-      return result;
+
+      // 类型筛选
+      if (currentType.value != null) {
+        sourceParts = sourceParts.where((s) => s.bookSourceType == currentType.value).toList();
+      }
+
+      return sourceParts;
     }, [
       sources,
-      searchQuery.value,
-      filterStatus.value,
-      filterGroup.value,
-      sortBy,
-      sortAscending,
+      currentFilter.value,
+      currentGroup.value,
+      currentType.value,
+      searchKeyword.value,
+      store.select(context, (s) => s.sortBy),
+      store.select(context, (s) => s.sortAscending),
     ]);
 
-    void addSource() {
-      final name = nameController.text.trim();
-      final url = urlController.text.trim();
-      if (name.isEmpty || url.isEmpty) return;
-      useSourceStore().addSource(VideoSource(
-        id: '',
-        name: name,
-        apiUrl: url,
-        type: selectedType.value,
-        group: selectedGroup.value,
-      ));
-      nameController.clear();
-      urlController.clear();
-      if (selectedGroup.value.isNotEmpty &&
-          !groups.contains(selectedGroup.value)) {
-        useSourceStore().addGroup(selectedGroup.value);
-      }
-    }
-
-    // 测试单个源
-    Future<void> testSingleSource(int index) async {
-      testingIndex.value = index;
-      final result = await useSourceStore().testSource(index);
-      testingIndex.value = null;
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            result >= 0
-                ? '${t.testSuccess} ($result ${t.ms})'
-                : t.testFailed,
-          ),
-          duration: const Duration(seconds: 2),
-        ));
-      }
-    }
-
-    // 测试所有源
-    Future<void> testAll() async {
-      isTesting.value = true;
-      await useSourceStore().testAllSources();
-      isTesting.value = false;
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(t.testAllSources),
-          duration: const Duration(seconds: 2),
-        ));
-      }
-    }
-
-    // 导出源
-    Future<void> exportSources() async {
-      try {
-        final jsonStr = useSourceStore().exportSources();
-        final dir = await getApplicationDocumentsDirectory();
-        final now = DateTime.now();
-        final fileName =
-            'iris_sources_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
-        final file = File('${dir.path}/$fileName');
-        await file.writeAsString(jsonStr);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${t.exportSuccess}: ${file.path}'),
-            duration: const Duration(seconds: 3),
-          ));
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${t.exportFailed}: $e'),
-            backgroundColor: colorScheme.error,
-          ));
-        }
-      }
-    }
-
-    // 导入源
-    Future<void> importSources() async {
-      try {
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
-        if (result == null || result.files.isEmpty) return;
-
-        final file = File(result.files.first.path!);
-        final jsonStr = await file.readAsString();
-
-        if (!context.mounted) return;
-
-        // 显示导入选项对话框
-        final mode = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(t.importMode),
-            content: Text(jsonStr.length > 200
-                ? '${jsonStr.substring(0, 200)}...'
-                : jsonStr),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, 'merge'),
-                child: Text(t.importMerge),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, 'replace'),
-                child: Text(t.importReplace),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(t.cancel),
-              ),
-            ],
-          ),
-        );
-
-        if (mode == null || !context.mounted) return;
-
-        final count = await useSourceStore()
-            .importSources(jsonStr, merge: mode == 'merge');
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(t.importSuccess(count.toString())),
-            duration: const Duration(seconds: 3),
-          ));
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${t.importFailed}: $e'),
-            backgroundColor: colorScheme.error,
-          ));
-        }
-      }
-    }
-
-    // 获取排序方式的本地化名称
-    String sortLabel(SourceSortBy s) {
-      switch (s) {
-        case SourceSortBy.weight:
-          return t.sortByWeight;
-        case SourceSortBy.name:
-          return t.sortByName;
-        case SourceSortBy.apiUrl:
-          return t.sortByUrl;
-        case SourceSortBy.lastUpdateTime:
-          return t.sortByUpdateTime;
-        case SourceSortBy.respondTime:
-          return t.sortByRespondTime;
-        case SourceSortBy.status:
-          return t.sortByStatus;
-      }
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(t.sourceManagement),
+      appBar: _buildAppBar(
+        context,
+        store,
+        isMultiSelectMode,
+        selectedUrls,
+        isSearchExpanded,
+        searchController,
+        searchKeyword,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          // Current source card
-          if (sources.isNotEmpty) ...[
-            _SectionTitle(title: t.currentSource),
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.check_circle_rounded,
-                  color: colorScheme.primary,
-                ),
-                title: Text(
-                  sources[currentSourceIndex].name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  sources[currentSourceIndex].apiUrl,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing:
-                    _StatusChip(status: sources[currentSourceIndex].status),
-              ),
+          // 筛选栏
+          if (!isMultiSelectMode.value)
+            SourceFilterBar(
+              currentFilter: currentFilter.value,
+              currentGroup: currentGroup.value,
+              currentType: currentType.value,
+              groups: groups,
+              onFilterChanged: (value) => currentFilter.value = value,
+              onGroupChanged: (value) => currentGroup.value = value,
+              onTypeChanged: (value) => currentType.value = value,
             ),
-            const SizedBox(height: 24),
-          ],
 
-          // ============================================================
-          // 搜索栏
-          // ============================================================
-          _SectionTitle(title: t.sources),
-          TextField(
-            decoration: InputDecoration(
-              hintText: t.searchSourceHint,
-              prefixIcon: const Icon(Icons.search_rounded),
-              border: const OutlineInputBorder(),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            onChanged: (value) => searchQuery.value = value,
-          ),
-          const SizedBox(height: 12),
-
-          // ============================================================
-          // 排序控制
-          // ============================================================
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<SourceSortBy>(
-                  initialValue: sortBy,
-                  decoration: InputDecoration(
-                    labelText: t.sortBy,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    prefixIcon: const Icon(Icons.sort_rounded),
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  items: SourceSortBy.values
-                      .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(sortLabel(s)),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) useSourceStore().setSortBy(value);
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                onPressed: () => useSourceStore().toggleSortDirection(),
-                icon: Icon(sortAscending
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded),
-                tooltip: sortAscending ? t.sortAscending : t.sortDescending,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // ============================================================
-          // 状态筛选 Chips
-          // ============================================================
-          Wrap(
-            spacing: 8,
-            children: [
-              FilterChip(
-                label: Text(t.all),
-                selected: filterStatus.value == null,
-                onSelected: (_) => filterStatus.value = null,
-              ),
-              FilterChip(
-                label: Text(t.active),
-                selected: filterStatus.value == SourceStatus.active,
-                onSelected: (_) => filterStatus.value =
-                    filterStatus.value == SourceStatus.active
-                        ? null
-                        : SourceStatus.active,
-              ),
-              FilterChip(
-                label: Text(t.inactive),
-                selected: filterStatus.value == SourceStatus.inactive,
-                onSelected: (_) => filterStatus.value =
-                    filterStatus.value == SourceStatus.inactive
-                        ? null
-                        : SourceStatus.inactive,
-              ),
-              FilterChip(
-                label: Text(t.error),
-                selected: filterStatus.value == SourceStatus.error,
-                onSelected: (_) => filterStatus.value =
-                    filterStatus.value == SourceStatus.error
-                        ? null
-                        : SourceStatus.error,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // ============================================================
-          // 分组筛选下拉
-          // ============================================================
-          if (allGroups.isNotEmpty)
-            DropdownButtonFormField<String?>(
-              initialValue: filterGroup.value,
-              decoration: InputDecoration(
-                labelText: t.group,
-                border: const OutlineInputBorder(),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                prefixIcon: const Icon(Icons.folder_outlined),
-              ),
-              borderRadius: BorderRadius.circular(12),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(t.allGroups),
-                ),
-                ...allGroups.map((g) => DropdownMenuItem<String?>(
-                      value: g,
-                      child: Text(g),
-                    )),
-              ],
-              onChanged: (value) => filterGroup.value = value,
-            ),
-          const SizedBox(height: 12),
-
-          // ============================================================
-          // 批量操作栏
-          // ============================================================
-          if (sources.isNotEmpty)
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: isTesting.value ? null : testAll,
-                    icon: isTesting.value
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.network_check_rounded),
-                    label: Text(t.testAllSources),
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(height: 8),
-
-          // ============================================================
           // 源列表
-          // ============================================================
-          if (filteredSources.isEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.cloud_off_rounded,
-                          size: 48,
-                          color: colorScheme.onSurfaceVariant.withAlpha(128)),
-                      const SizedBox(height: 12),
-                      Text(
-                        t.noSources,
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant.withAlpha(180),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            ...filteredSources.map((source) {
-              final originalIndex = sources.indexOf(source);
-              final isCurrent = originalIndex == currentSourceIndex;
-              final isTestingThis = testingIndex.value == originalIndex;
-              return Card(
-                color: isCurrent
-                    ? colorScheme.primaryContainer.withAlpha(64)
-                    : null,
-                child: ListTile(
-                  leading: Icon(
-                    isCurrent
-                        ? Icons.radio_button_checked_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: isCurrent ? colorScheme.primary : null,
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(child: Text(source.name)),
-                      if (source.weight > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          margin: const EdgeInsets.only(left: 4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.tertiaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '#${source.weight}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: colorScheme.onTertiaryContainer,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        source.apiUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (source.group.isNotEmpty) ...[
-                            Icon(Icons.folder_outlined,
-                                size: 12, color: colorScheme.onSurfaceVariant),
-                            const SizedBox(width: 2),
-                            Text(
-                              source.group,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          if (source.respondTime > 0) ...[
-                            Icon(Icons.timer_outlined,
-                                size: 12, color: colorScheme.onSurfaceVariant),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${source.respondTime} ${t.ms}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _StatusChip(status: source.status),
-                      const SizedBox(width: 4),
-                      if (isTestingThis)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded,
-                            size: 20,
-                            color: colorScheme.onSurfaceVariant),
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'select':
-                              useSourceStore()
-                                  .updateCurrentSourceIndex(originalIndex);
-                              break;
-                            case 'edit':
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => SourceEditPage(
-                                    source: source,
-                                    sourceIndex: originalIndex,
-                                  ),
-                                ),
-                              );
-                              break;
-                            case 'test':
-                              testSingleSource(originalIndex);
-                              break;
-                            case 'delete':
-                              useSourceStore().removeSource(source.id);
-                              break;
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          if (!isCurrent)
-                            PopupMenuItem(
-                              value: 'select',
-                              child: Text(t.selectSource),
-                            ),
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text(t.edit),
-                          ),
-                          PopupMenuItem(
-                            value: 'test',
-                            child: Text(t.testSource),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text(t.deleteSource),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  onTap: () =>
-                      useSourceStore().updateCurrentSourceIndex(originalIndex),
-                ),
-              );
-            }),
-
-          const SizedBox(height: 24),
-
-          // ============================================================
-          // 添加源表单
-          // ============================================================
-          _SectionTitle(title: t.addSource),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: t.sourceName,
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.label_outline_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: urlController,
-                    decoration: InputDecoration(
-                      labelText: t.sourceApiUrl,
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.link_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<SourceType>(
-                    initialValue: selectedType.value,
-                    decoration: InputDecoration(
-                      labelText: t.sourceType,
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.category_outlined),
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    items: [
-                      DropdownMenuItem(
-                        value: SourceType.maccms,
-                        child: Text('MacCMS'),
-                      ),
-                      DropdownMenuItem(
-                        value: SourceType.universal,
-                        child: Text(t.universal),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) selectedType.value = value;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  // 分组选择（支持从已有分组选择或输入新分组）
-                  Autocomplete<String>(
-                    optionsBuilder: (textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return allGroups;
-                      }
-                      return allGroups.where((g) => g
-                          .toLowerCase()
-                          .contains(textEditingValue.text.toLowerCase()));
-                    },
-                    onSelected: (value) => selectedGroup.value = value,
-                    fieldViewBuilder: (context, controller, focusNode,
-                        onFieldSubmitted) {
-                      useEffect(() {
-                        controller.text = selectedGroup.value;
-                        return null;
-                      }, [selectedGroup.value]);
-                      return TextFormField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: t.group,
-                          border: const OutlineInputBorder(),
-                          prefixIcon: const Icon(Icons.folder_outlined),
-                        ),
-                        onChanged: (value) => selectedGroup.value = value,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: addSource,
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(t.addSource),
-                    ),
-                  ),
-                ],
-              ),
+          Expanded(
+            child: _buildSourceList(
+              context,
+              store,
+              filteredSources,
+              isMultiSelectMode,
+              selectedUrls,
             ),
           ),
-
-          const SizedBox(height: 24),
-
-          // ============================================================
-          // 订阅管理
-          // ============================================================
-          _SectionTitle(title: t.subscription),
-          _SubscriptionSection(
-            subscriptions: subscriptions,
-            t: t,
-            colorScheme: colorScheme,
-          ),
-
-          const SizedBox(height: 24),
-
-          // ============================================================
-          // 导入导出
-          // ============================================================
-          _SectionTitle(title: '${t.importSources} / ${t.exportSources}'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: importSources,
-                      icon: const Icon(Icons.file_upload_outlined),
-                      label: Text(t.importSources),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: exportSources,
-                      icon: const Icon(Icons.file_download_outlined),
-                      label: Text(t.exportSources),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 80), // Bottom padding for NavigationBar
         ],
       ),
+
+      // 批量操作栏
+      bottomNavigationBar: isMultiSelectMode.value
+          ? SourceBatchBar(
+              selectedCount: selectedUrls.value.length,
+              totalCount: filteredSources.length,
+              onSelectAll: () {
+                selectedUrls.value = filteredSources
+                    .map((s) => s.bookSourceUrl)
+                    .toSet();
+              },
+              onRevertSelection: () {
+                final allUrls = filteredSources
+                    .map((s) => s.bookSourceUrl)
+                    .toSet();
+                selectedUrls.value = allUrls.difference(selectedUrls.value);
+              },
+              onDelete: () => _batchDelete(context, store, selectedUrls),
+              onEnable: () => _batchEnable(store, selectedUrls, true),
+              onDisable: () => _batchEnable(store, selectedUrls, false),
+              onEnableExplore: () => _batchEnableExplore(store, selectedUrls, true),
+              onDisableExplore: () => _batchEnableExplore(store, selectedUrls, false),
+              onTop: () => _batchTop(store, selectedUrls),
+              onBottom: () => _batchBottom(store, selectedUrls),
+              onExport: () => _batchExport(context, store, selectedUrls),
+              onAddToGroup: () => _showAddToGroupDialog(context, store, selectedUrls),
+            )
+          : null,
+
+      // FAB
+      floatingActionButton: isMultiSelectMode.value
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showAddSourceDialog(context, store),
+              child: const Icon(Icons.add),
+            ),
     );
   }
-}
 
-/// 订阅管理组件
-class _SubscriptionSection extends HookWidget {
-  const _SubscriptionSection({
-    required this.subscriptions,
-    required this.t,
-    required this.colorScheme,
-  });
+  /// 构建 AppBar
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context,
+    SourceStore store,
+    ValueNotifier<bool> isMultiSelectMode,
+    ValueNotifier<Set<String>> selectedUrls,
+    ValueNotifier<bool> isSearchExpanded,
+    TextEditingController searchController,
+    ValueNotifier<String> searchKeyword,
+  ) {
+    return AppBar(
+      title: isMultiSelectMode.value
+          ? Text('已选 ${selectedUrls.value.length} 项')
+          : isSearchExpanded.value
+              ? TextField(
+                  controller: searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '搜索源...',
+                    border: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        searchController.clear();
+                        searchKeyword.value = '';
+                        isSearchExpanded.value = false;
+                      },
+                    ),
+                  ),
+                  onChanged: (value) => searchKeyword.value = value,
+                )
+              : const Text('源管理'),
+      leading: isMultiSelectMode.value
+          ? IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                isMultiSelectMode.value = false;
+                selectedUrls.value = {};
+              },
+            )
+          : null,
+      actions: [
+        if (!isMultiSelectMode.value) ...[
+          // 搜索按钮
+          IconButton(
+            icon: Icon(isSearchExpanded.value ? Icons.search_off : Icons.search),
+            onPressed: () {
+              isSearchExpanded.value = !isSearchExpanded.value;
+              if (!isSearchExpanded.value) {
+                searchController.clear();
+                searchKeyword.value = '';
+              }
+            },
+          ),
 
-  final List<SourceSubscription> subscriptions;
-  final dynamic t;
-  final ColorScheme colorScheme;
+          // 排序菜单
+          SourceSortMenu(
+            currentSort: BookSourceSort.values[store.select(context, (s) => s.sortBy)],
+            sortAscending: store.select(context, (s) => s.sortAscending),
+            onSortChanged: (sort) => store.setSortBy(sort.index),
+            onToggleDirection: () => store.toggleSortDirection(),
+          ),
 
-  @override
-  Widget build(BuildContext context) {
-    final isSyncing = useState(false);
-    final syncingUrl = useState<String?>(null);
-    final urlController = useTextEditingController();
-    final nameController = useTextEditingController();
-
-    // 添加订阅对话框
-    Future<void> showAddDialog() async {
-      urlController.clear();
-      nameController.clear();
-      final result = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(t.addSubscription),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: t.subscriptionName,
-                  hintText: t.subscriptionNameHint,
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.label_outline_rounded),
+          // 更多菜单
+          PopupMenuButton<String>(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'add',
+                child: ListTile(
+                  leading: Icon(Icons.add),
+                  title: Text('添加源'),
+                  dense: true,
                 ),
-                autofocus: true,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: urlController,
-                decoration: InputDecoration(
-                  labelText: t.subscriptionUrl,
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.rss_feed_rounded),
+              const PopupMenuItem(
+                value: 'test_all',
+                child: ListTile(
+                  leading: Icon(Icons.speed),
+                  title: Text('测试全部'),
+                  dense: true,
                 ),
-                keyboardType: TextInputType.url,
+              ),
+              const PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.file_upload),
+                  title: Text('导入'),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.file_download),
+                  title: Text('导出'),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'group',
+                child: ListTile(
+                  leading: Icon(Icons.folder),
+                  title: Text('分组管理'),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'subscription',
+                child: ListTile(
+                  leading: Icon(Icons.subscriptions),
+                  title: Text('订阅管理'),
+                  dense: true,
+                ),
               ),
             ],
+            onSelected: (value) {
+              switch (value) {
+                case 'add':
+                  _showAddSourceDialog(context, store);
+                  break;
+                case 'test_all':
+                  _testAllSources(context, store);
+                  break;
+                case 'import':
+                  _importSources(context, store);
+                  break;
+                case 'export':
+                  _exportSources(context, store);
+                  break;
+                case 'group':
+                  _showGroupDialog(context);
+                  break;
+                case 'subscription':
+                  _showSubscriptionDialog(context);
+                  break;
+              }
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(t.cancel),
-            ),
-            FilledButton(
-              onPressed: () {
-                final url = urlController.text.trim();
-                final name = nameController.text.trim();
-                if (url.isEmpty) return;
-                useSourceStore().addSubscription(SourceSubscription(
-                  name: name.isEmpty ? url : name,
-                  url: url,
-                ));
-                Navigator.pop(ctx, true);
-              },
-              child: Text(t.add),
-            ),
+        ],
+      ],
+    );
+  }
+
+  /// 构建源列表
+  Widget _buildSourceList(
+    BuildContext context,
+    SourceStore store,
+    List<BookSourcePart> sources,
+    ValueNotifier<bool> isMultiSelectMode,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) {
+    if (sources.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.source_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text('暂无源', style: TextStyle(fontSize: 16, color: Colors.grey[500])),
+            const SizedBox(height: 8),
+            Text('点击右下角 + 添加源', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
           ],
         ),
       );
-      if (result == true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(t.addSubscription),
-          duration: const Duration(seconds: 1),
-        ));
-      }
     }
 
-    // 同步单个订阅
-    Future<void> syncOne(String url) async {
-      syncingUrl.value = url;
-      final count = await useSourceStore().syncSubscription(url);
-      syncingUrl.value = null;
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            count >= 0
-                ? '${t.syncSuccess} ($count ${t.sources})'
-                : t.syncFailed,
-          ),
-          duration: const Duration(seconds: 2),
-        ));
-      }
-    }
-
-    // 同步所有订阅
-    Future<void> syncAll() async {
-      isSyncing.value = true;
-      await useSourceStore().syncAllSubscriptions();
-      isSyncing.value = false;
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(t.syncSuccess),
-          duration: const Duration(seconds: 2),
-        ));
-      }
-    }
-
-    // 格式化时间
-    String formatTime(int timestamp) {
-      if (timestamp == 0) return t.never;
-      final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
-      return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 操作按钮行
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: isSyncing.value ? null : syncAll,
-                    icon: isSyncing.value
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.sync_rounded),
-                    label: Text(t.syncAllSubscriptions),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: showAddDialog,
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(t.addSubscription),
-                ),
-              ],
+    // 手动排序模式使用 ReorderableListView
+    if (store.select(context, (s) => s.sortBy) == BookSourceSort.custom.index) {
+      return ReorderableListView.builder(
+        onReorder: (oldIndex, newIndex) {
+          if (newIndex > oldIndex) newIndex--;
+          final source = sources[oldIndex];
+          store.updateSource(
+            store.getSource(source.bookSourceUrl)!.copyWith(
+              customOrder: newIndex,
             ),
+          );
+          store.adjustSortNumbers();
+        },
+        itemCount: sources.length,
+        itemBuilder: (context, index) {
+          final source = sources[index];
+          return SourceTile(
+            key: ValueKey(source.bookSourceUrl),
+            source: source,
+            isSelected: selectedUrls.value.contains(source.bookSourceUrl),
+            isMultiSelectMode: isMultiSelectMode.value,
+            onTap: () => _handleTap(
+              context,
+              store,
+              source,
+              isMultiSelectMode,
+              selectedUrls,
+            ),
+            onLongPress: () => _handleLongPress(
+              source,
+              isMultiSelectMode,
+              selectedUrls,
+            ),
+            onSelectionChanged: (value) {
+              final newSet = Set<String>.from(selectedUrls.value);
+              if (value == true) {
+                newSet.add(source.bookSourceUrl);
+              } else {
+                newSet.remove(source.bookSourceUrl);
+              }
+              selectedUrls.value = newSet;
+              if (newSet.isEmpty) {
+                isMultiSelectMode.value = false;
+              }
+            },
+            onEdit: () => _editSource(context, source),
+            onTest: () => _testSource(context, store, source),
+            onDelete: () => _deleteSource(context, store, source),
+          );
+        },
+      );
+    }
 
-            const SizedBox(height: 12),
+    // 其他排序模式使用 ListView
+    return ListView.builder(
+      itemCount: sources.length,
+      itemBuilder: (context, index) {
+        final source = sources[index];
+        return SourceTile(
+          key: ValueKey(source.bookSourceUrl),
+          source: source,
+          isSelected: selectedUrls.value.contains(source.bookSourceUrl),
+          isMultiSelectMode: isMultiSelectMode.value,
+          onTap: () => _handleTap(
+            context,
+            store,
+            source,
+            isMultiSelectMode,
+            selectedUrls,
+          ),
+          onLongPress: () => _handleLongPress(
+            source,
+            isMultiSelectMode,
+            selectedUrls,
+          ),
+          onSelectionChanged: (value) {
+            final newSet = Set<String>.from(selectedUrls.value);
+            if (value == true) {
+              newSet.add(source.bookSourceUrl);
+            } else {
+              newSet.remove(source.bookSourceUrl);
+            }
+            selectedUrls.value = newSet;
+            if (newSet.isEmpty) {
+              isMultiSelectMode.value = false;
+            }
+          },
+          onEdit: () => _editSource(context, source),
+          onTest: () => _testSource(context, store, source),
+          onDelete: () => _deleteSource(context, store, source),
+        );
+      },
+    );
+  }
 
-            // 订阅列表
-            if (subscriptions.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.rss_feed_outlined,
-                          size: 36,
-                          color: colorScheme.onSurfaceVariant.withAlpha(128)),
-                      const SizedBox(height: 8),
-                      Text(
-                        t.noSubscriptions,
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant.withAlpha(180),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ...subscriptions.map((sub) {
-                final isSyncingThis = syncingUrl.value == sub.url;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.rss_feed_rounded,
-                      color: sub.lastSyncSuccess == true
-                          ? Colors.green
-                          : sub.lastSyncSuccess == false
-                              ? colorScheme.error
-                              : colorScheme.onSurfaceVariant,
-                    ),
-                    title: Text(sub.name),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          sub.url,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Text(
-                              '${t.lastSync}: ${formatTime(sub.lastSyncTime)}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            if (sub.sourceCount > 0) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                '${t.sourceCount}: ${sub.sourceCount}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isSyncingThis)
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          IconButton(
-                            onPressed: () => syncOne(sub.url),
-                            icon: const Icon(Icons.sync_rounded, size: 20),
-                            tooltip: t.syncSubscription,
-                          ),
-                        IconButton(
-                          onPressed: () =>
-                              useSourceStore().removeSubscription(sub.url),
-                          icon: Icon(Icons.delete_outline_rounded,
-                              size: 20, color: colorScheme.error),
-                          tooltip: t.removeSubscription,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+  // ========== 交互处理 ==========
+
+  void _handleTap(
+    BuildContext context,
+    SourceStore store,
+    BookSourcePart source,
+    ValueNotifier<bool> isMultiSelectMode,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) {
+    if (isMultiSelectMode.value) {
+      // 多选模式：切换选中状态
+      final newSet = Set<String>.from(selectedUrls.value);
+      if (newSet.contains(source.bookSourceUrl)) {
+        newSet.remove(source.bookSourceUrl);
+      } else {
+        newSet.add(source.bookSourceUrl);
+      }
+      selectedUrls.value = newSet;
+      if (newSet.isEmpty) {
+        isMultiSelectMode.value = false;
+      }
+    } else {
+      // 普通模式：进入编辑
+      _editSource(context, source);
+    }
+  }
+
+  void _handleLongPress(
+    BookSourcePart source,
+    ValueNotifier<bool> isMultiSelectMode,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) {
+    HapticFeedback.mediumImpact();
+    isMultiSelectMode.value = true;
+    selectedUrls.value = {source.bookSourceUrl};
+  }
+
+  // ========== 源操作 ==========
+
+  void _editSource(BuildContext context, BookSourcePart source) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SourceEditPage(
+          bookSourceUrl: source.bookSourceUrl,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _testSource(
+    BuildContext context,
+    SourceStore store,
+    BookSourcePart source,
+  ) async {
+    final scaffold = ScaffoldMessenger.of(context);
+    scaffold.showSnackBar(
+      SnackBar(content: Text('正在测试: ${source.bookSourceName}')),
+    );
+
+    final success = await store.testSource(source.bookSourceUrl);
+
+    scaffold.hideCurrentSnackBar();
+    scaffold.showSnackBar(
+      SnackBar(
+        content: Text(success ? '测试成功' : '测试失败'),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
+  Future<void> _deleteSource(
+    BuildContext context,
+    SourceStore store,
+    BookSourcePart source,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除 "${source.bookSourceName}" 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await store.removeSource(source.bookSourceUrl);
+    }
+  }
+
+  // ========== 批量操作 ==========
+
+  Future<void> _batchDelete(
+    BuildContext context,
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除选中的 ${selectedUrls.value.length} 个源吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await store.removeSources(selectedUrls.value.toList());
+      selectedUrls.value = {};
+    }
+  }
+
+  Future<void> _batchEnable(
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+    bool enable,
+  ) async {
+    await store.enableSources(selectedUrls.value.toList(), enable);
+  }
+
+  Future<void> _batchEnableExplore(
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+    bool enable,
+  ) async {
+    await store.enableExploreSources(selectedUrls.value.toList(), enable);
+  }
+
+  Future<void> _batchTop(
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) async {
+    await store.topSources(selectedUrls.value.toList());
+  }
+
+  Future<void> _batchBottom(
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) async {
+    await store.bottomSources(selectedUrls.value.toList());
+  }
+
+  Future<void> _batchExport(
+    BuildContext context,
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) async {
+    await store.exportSources(urls: selectedUrls.value.toList());
+    // TODO: 保存到文件
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('导出成功')),
+      );
+    }
+  }
+
+  void _showAddToGroupDialog(
+    BuildContext context,
+    SourceStore store,
+    ValueNotifier<Set<String>> selectedUrls,
+  ) {
+    final groupController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加到分组'),
+        content: TextField(
+          controller: groupController,
+          decoration: const InputDecoration(
+            labelText: '分组名称',
+            hintText: '输入或选择分组',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (groupController.text.isNotEmpty) {
+                store.addToGroup(selectedUrls.value.toList(), groupController.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== 全局操作 ==========
+
+  void _showAddSourceDialog(BuildContext context, SourceStore store) {
+    final nameController = TextEditingController();
+    final urlController = TextEditingController();
+    final groupController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加源'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: '源名称',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: '源地址',
+                hintText: 'https://example.com',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: groupController,
+              decoration: const InputDecoration(
+                labelText: '分组（可选）',
+                hintText: '多个分组用逗号分隔',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty && urlController.text.isNotEmpty) {
+                store.addSource(BookSource(
+                  bookSourceUrl: urlController.text,
+                  bookSourceName: nameController.text,
+                  bookSourceGroup: groupController.text.isNotEmpty
+                      ? groupController.text
+                      : null,
+                ));
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _testAllSources(BuildContext context, SourceStore store) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('测试全部'),
+        content: Text('确定要测试全部 ${store.sourceCount} 个源吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('开始'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final results = await store.testSources();
+      final successCount = results.values.where((v) => v).length;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('测试完成: $successCount/${results.length} 成功')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importSources(BuildContext context, SourceStore store) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导入源'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('从URL导入'),
+              onTap: () {
+                Navigator.pop(context);
+                _showImportUrlDialog(context, store);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_upload),
+              title: const Text('从文件导入'),
+              onTap: () {
+                Navigator.pop(context);
+                _importFromFile(context, store);
+              },
+            ),
           ],
         ),
       ),
     );
   }
-}
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title});
+  void _showImportUrlDialog(BuildContext context, SourceStore store) {
+    final urlController = TextEditingController();
+    final isLoading = ValueNotifier(false);
 
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+    showDialog(
+      context: context,
+      builder: (dialogContext) => ValueListenableBuilder<bool>(
+        valueListenable: isLoading,
+        builder: (context, loading, _) => AlertDialog(
+          title: const Text('从URL导入'),
+          content: loading
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('正在导入...'),
+                  ],
+                )
+              : TextField(
+                  controller: urlController,
+                  decoration: const InputDecoration(
+                    labelText: 'URL',
+                    hintText: 'https://example.com/sources.json',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+          actions: loading
+              ? []
+              : [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('取消'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (urlController.text.isNotEmpty) {
+                        isLoading.value = true;
+                        try {
+                          final result = await store.importSources(urlController.text);
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(result.hasErrors
+                                    ? '导入完成: ${result.newCount} 新源, ${result.updatedCount} 更新, ${result.errors.length} 错误'
+                                    : '导入成功: ${result.newCount} 个新源, ${result.updatedCount} 个更新'),
+                                backgroundColor: result.hasErrors ? Colors.orange : Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          isLoading.value = false;
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('导入失败: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    child: const Text('导入'),
+                  ),
+                ],
         ),
       ),
     );
   }
-}
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+  Future<void> _importFromFile(BuildContext context, SourceStore store) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
 
-  final SourceStatus status;
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
 
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    Color color;
-    String label;
-    switch (status) {
-      case SourceStatus.active:
-        color = Colors.green;
-        label = '正常'; // TODO: use l10n
-        break;
-      case SourceStatus.inactive:
-        color = Colors.orange;
-        label = '离线';
-        break;
-      case SourceStatus.error:
-        color = colorScheme.error;
-        label = '错误';
-        break;
+      final file = result.files.first;
+      if (file.path == null) {
+        return;
+      }
+
+      final content = await file.xFile.readAsString();
+      final importResult = await store.importSources(content);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(importResult.hasErrors
+                ? '导入完成: ${importResult.newCount} 新源, ${importResult.updatedCount} 更新, ${importResult.errors.length} 错误'
+                : '导入成功: ${importResult.newCount} 个新源, ${importResult.updatedCount} 个更新'),
+            backgroundColor: importResult.hasErrors ? Colors.orange : Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withAlpha(32),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(80)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: color),
-          ),
-        ],
-      ),
+  }
+
+  Future<void> _exportSources(BuildContext context, SourceStore store) async {
+    await store.exportSources();
+    // TODO: 保存到文件
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('导出成功')),
+      );
+    }
+  }
+
+  void _showGroupDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const GroupDialog(),
+    );
+  }
+
+  void _showSubscriptionDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const SubscriptionDialog(),
     );
   }
 }

@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_zustand/flutter_zustand.dart';
 import 'package:iris/models/store/app_state.dart';
 import 'package:iris/store/persistent_store.dart';
-import 'package:iris/utils/logger.dart';
 
 class AppStore extends PersistentStore<AppState> {
   AppStore() : super(AppState());
@@ -63,7 +62,6 @@ class AppStore extends PersistentStore<AppState> {
   }
 
   Future<void> updateRate(double value) async {
-    logger('updateRate: $value');
     set(state.copyWith(rate: value));
     await save(state);
   }
@@ -143,9 +141,25 @@ class AppStore extends PersistentStore<AppState> {
     set(state.copyWith(showPlayer: show));
   }
 
+  // ========== 代理设置 ==========
+
+  Future<void> updateEnableProxy(bool enable) async {
+    set(state.copyWith(enableProxy: enable));
+    await save(state);
+  }
+
+  Future<void> updateProxyHost(String host) async {
+    set(state.copyWith(proxyHost: host));
+    await save(state);
+  }
+
+  Future<void> updateProxyPort(int port) async {
+    set(state.copyWith(proxyPort: port));
+    await save(state);
+  }
+
   @override
   Future<AppState?> load() async {
-    logger('Loading AppState');
     try {
       AndroidOptions getAndroidOptions() => const AndroidOptions(
             encryptedSharedPreferences: true,
@@ -160,7 +174,7 @@ class AppStore extends PersistentStore<AppState> {
         );
       }
     } catch (e) {
-      logger('Error loading AppState: $e');
+      // ignore
     }
     return null;
   }
@@ -175,7 +189,7 @@ class AppStore extends PersistentStore<AppState> {
 
       await storage.write(key: 'app_state', value: json.encode(state.toJson()));
     } catch (e) {
-      logger('Error saving AppState: $e');
+      // ignore
     }
   }
 }

@@ -15,7 +15,6 @@ import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/store/use_player_ui_store.dart';
 import 'package:iris/store/use_storage_store.dart';
 import 'package:iris/utils/check_data_source_type.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:media_stream/media_stream.dart';
 import 'package:saf_util/saf_util.dart';
@@ -94,7 +93,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
 
     try {
       if (controller.value.value.isInitialized) {
-        logger('Dispose player');
         controller.value.dispose();
       }
 
@@ -103,8 +101,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
       } else {
         final storage = useStorageStore().findById(file.storageId);
         final auth = storage?.getAuth();
-
-        logger('Open file: $file');
 
         switch (checkDataSourceType(file)) {
           case DataSourceType.file:
@@ -131,7 +127,7 @@ FvpPlayer useFvpPlayer(BuildContext context) {
       await controller.value.setPlaybackSpeed(rate);
       await controller.value.setVolume(isMuted ? 0 : volume / 100);
     } catch (e) {
-      logger('Error initializing player: $e');
+      // ignore
     } finally {
       isInitializing.value = false;
     }
@@ -162,8 +158,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
             ? '$streamUrl/${externalSubtitles[currentExternalSubtitle].uri}'
             : externalSubtitles[currentExternalSubtitle].uri;
 
-        logger('External subtitle uri: $uri');
-
         if (Platform.isAndroid &&
             externalSubtitles[currentExternalSubtitle]
                 .uri
@@ -188,7 +182,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
           controller.value.value.isCompleted &&
           controller.value.value.position != Duration.zero &&
           controller.value.value.duration != Duration.zero) {
-        logger('Completed: ${file.name}');
         if (repeat == Repeat.one) return;
         if (currentPlayIndex == playQueue.length - 1) {
           if (repeat == Repeat.all) {
@@ -219,7 +212,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
 
   useEffect(() {
     if (controller.value.value.isInitialized) {
-      logger('Set looping: $looping');
       controller.value.setLooping(repeat == Repeat.one ? true : false);
     }
     return;
@@ -236,8 +228,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
               (progress.duration.inMilliseconds -
                       progress.position.inMilliseconds) >
                   5000) {
-            logger(
-                'Resume progress: ${file.name} position: ${progress.position} duration: ${progress.duration}');
             await controller.value.seekTo(progress.position);
           }
         }
@@ -266,8 +256,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
       if (file != null &&
           controller.value.value.isInitialized &&
           controller.value.value.duration.inSeconds != 0) {
-        logger(
-            'Save progress: ${file.name}, position: ${controller.value.value.position}, duration: ${controller.value.value.duration}');
         useHistoryStore().add(Progress(
           dateTime: DateTime.now().toUtc(),
           position: controller.value.value.position,
@@ -280,10 +268,8 @@ FvpPlayer useFvpPlayer(BuildContext context) {
 
   useEffect(() {
     if (controller.value.value.isPlaying) {
-      logger('Enable wakelock');
       WakelockPlus.enable();
     } else {
-      logger('Disable wakelock');
       WakelockPlus.disable();
     }
     return;
@@ -303,7 +289,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
   }
 
   Future<void> seek(Duration newPosition) async {
-    logger('Seek to: $newPosition');
     if (controller.value.value.duration == Duration.zero) return;
     newPosition.inSeconds < 0
         ? await controller.value.seekTo(Duration.zero)
@@ -321,14 +306,12 @@ FvpPlayer useFvpPlayer(BuildContext context) {
   Future<void> stepBackward() async {
     if (file?.type == ContentType.video) {
       await controller.value.step(frames: -1);
-      logger('Step backward');
     }
   }
 
   Future<void> stepForward() async {
     if (file?.type == ContentType.video) {
       await controller.value.step(frames: 1);
-      logger('Step forward');
     }
   }
 
@@ -341,8 +324,6 @@ FvpPlayer useFvpPlayer(BuildContext context) {
     }
 
     if (file != null && controller.value.value.duration != Duration.zero) {
-      logger(
-          'Save progress: ${file.name}, position: ${controller.value.value.position}, duration: ${controller.value.value.duration}');
       useHistoryStore().add(Progress(
         dateTime: DateTime.now().toUtc(),
         position: controller.value.value.position,

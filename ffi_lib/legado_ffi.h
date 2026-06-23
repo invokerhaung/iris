@@ -87,9 +87,6 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern __declspec(dllexport) void LogInit(char* path);
-extern __declspec(dllexport) void LogSetEnabled(int enabled);
-extern __declspec(dllexport) void LogClose(void);
 extern __declspec(dllexport) GoInt64 AnalyzerNew(GoInt64 ruleDataID, GoInt64 sourceID);
 extern __declspec(dllexport) void AnalyzerSetContent(GoInt64 analyzerID, char* content, char* baseUrl);
 extern __declspec(dllexport) void AnalyzerSetRedirectUrl(GoInt64 analyzerID, char* url);

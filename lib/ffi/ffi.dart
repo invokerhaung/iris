@@ -6,11 +6,12 @@
 /// ```
 ///
 /// 提供以下高层 API：
-/// - [LegadoLog] — 日志管理
 /// - [LegadoAnalyzer] — HTML/内容解析
 /// - [LegadoRuleData] — 键值对变量存储
 /// - [LegadoJS] — JavaScript 引擎
 /// - [LegadoURL] — URL 解析
+///
+/// 日志系统在库加载时自动初始化，日志文件输出到可执行文件同目录。
 ///
 /// 如需访问底层绑定，可使用 [LegadoFFIBindings.instance]。
 

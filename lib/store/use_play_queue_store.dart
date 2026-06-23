@@ -11,7 +11,6 @@ import 'package:iris/globals.dart' as globals;
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/utils/check_content_type.dart';
 import 'package:iris/utils/get_shuffle_play_queue.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:saf_util/saf_util.dart';
 
@@ -130,7 +129,6 @@ class PlayQueueStore extends PersistentStore<PlayQueueState> {
 
   @override
   Future<PlayQueueState?> load() async {
-    logger('Loading PlayQueueState');
     try {
       if (isDesktop && globals.arguments.isNotEmpty) {
         String uri = globals.arguments[0];
@@ -198,7 +196,7 @@ class PlayQueueStore extends PersistentStore<PlayQueueState> {
         return PlayQueueState.fromJson(json.decode(appState));
       }
     } catch (e) {
-      logger('Error loading PlayQueueState: $e');
+      // ignore
     }
     return null;
   }
@@ -214,7 +212,7 @@ class PlayQueueStore extends PersistentStore<PlayQueueState> {
       await storage.write(
           key: 'playQueue_state', value: json.encode(state.toJson()));
     } catch (e) {
-      logger('Error saving PlayQueueState: $e');
+      // ignore
     }
   }
 }

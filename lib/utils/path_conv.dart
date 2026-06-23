@@ -1,4 +1,3 @@
-import 'package:iris/utils/logger.dart';
 import 'package:path/path.dart' as p;
 
 List<String> pathConv(String path) {
@@ -28,8 +27,7 @@ List<String> pathConv(String path) {
     }
 
     return result;
-  } on FormatException catch (e) {
-    logger("Error decoding: $e");
+  } on FormatException {
     return [];
   }
 }

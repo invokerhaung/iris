@@ -5,7 +5,6 @@ import 'package:flutter_zustand/flutter_zustand.dart';
 import 'package:iris/models/storages/storage.dart';
 import 'package:iris/models/store/storage_state.dart';
 import 'package:iris/store/persistent_store.dart';
-import 'package:iris/utils/logger.dart';
 
 class StorageStore extends PersistentStore<StorageState> {
   StorageStore() : super(StorageState());
@@ -57,7 +56,6 @@ class StorageStore extends PersistentStore<StorageState> {
 
   @override
   Future<StorageState?> load() async {
-    logger('Loading StorageState');
     try {
       AndroidOptions getAndroidOptions() => const AndroidOptions(
             encryptedSharedPreferences: true,
@@ -69,7 +67,7 @@ class StorageStore extends PersistentStore<StorageState> {
         return StorageState.fromJson(json.decode(storageState));
       }
     } catch (e) {
-      logger('Error loading StorageState: $e');
+      // ignore
     }
     return null;
   }
@@ -85,7 +83,7 @@ class StorageStore extends PersistentStore<StorageState> {
       await storage.write(
           key: 'storage_state', value: json.encode(state.toJson()));
     } catch (e) {
-      logger('Error saving StorageState: $e');
+      // ignore
     }
   }
 }

@@ -6,7 +6,6 @@ import 'package:iris/models/file.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/store/use_player_ui_store.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart';
@@ -74,12 +73,10 @@ void useResizeWindow() {
         final bool isCurrentLandscape = aspectRatio >= 1.0;
 
         if (isPreviousPortrait && isCurrentLandscape) {
-          logger('Resize rule: Portrait to Landscape (Height-based)');
           double newHeight = oldBounds.height;
           double newWidth = newHeight * aspectRatio;
           newSize = Size(newWidth, newHeight);
         } else {
-          logger('Resize rule: Standard (Normalized Area-based)');
           double currentArea = oldBounds.width * oldBounds.height;
           const double standardAspectRatio = 16.0 / 9.0;
           double normalizedHeight =

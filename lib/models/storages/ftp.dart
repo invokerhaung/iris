@@ -3,7 +3,6 @@ import 'package:iris/models/file.dart';
 import 'package:iris/models/storages/storage.dart';
 import 'package:iris/utils/check_content_type.dart';
 import 'package:iris/utils/get_subtitle_map.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:pure_ftp/pure_ftp.dart';
 
@@ -72,7 +71,6 @@ Future<List<FileItem>> getFTPFiles(
 
     return fileItems;
   } catch (error) {
-    logger('Error getting FTP files: $error');
     return [];
   }
 }
@@ -97,7 +95,6 @@ Future<bool> testFTP(FTPStorage storage) async {
     await client.disconnect();
     return true;
   } catch (error) {
-    logger('Error testing FTP: $error');
     return false;
   }
 }

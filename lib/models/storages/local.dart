@@ -11,7 +11,6 @@ import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/utils/files_sort.dart';
 import 'package:iris/utils/get_subtitle_map.dart';
 import 'package:iris/utils/get_localizations.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/path_conv.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:path/path.dart' as p;
@@ -86,17 +85,14 @@ Future<List<LocalStorage>> getLocalStorages(
     final androidXStorage = AndroidXStorage();
     final external =
         await androidXStorage.getExternalStorageDirectory().catchError((error) {
-      logger('Error getting external storage: $error');
       return null;
     });
     final sdcard =
         await androidXStorage.getSDCardStorageDirectory().catchError((error) {
-      logger('Error getting SD card: $error');
       return null;
     });
     final usbs =
         await androidXStorage.getUSBStorageDirectories().catchError((error) {
-      logger('Error getting USB storages: $error');
       return <String?>[];
     });
 
@@ -202,7 +198,6 @@ Future<List<FileItem>> getLocalFiles(
   final directory = Directory(directoryPath);
 
   if (!await directory.exists()) {
-    logger('Error: Directory does not exist at $directoryPath');
     return [];
   }
 

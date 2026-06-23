@@ -14,7 +14,6 @@ import 'package:iris/store/use_history_store.dart';
 import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/store/use_player_ui_store.dart';
 import 'package:iris/store/use_storage_store.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -51,7 +50,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
         final Directory fontsDirectory = Directory(fontsDir);
         if (!await fontsDirectory.exists()) {
           await fontsDirectory.create(recursive: true);
-          logger('fonts directory created');
         }
 
         final File file = File("$fontsDir/NotoSansCJKsc-Medium.otf");
@@ -61,7 +59,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
           final Uint8List buffer = data.buffer.asUint8List();
           await file.create(recursive: true);
           await file.writeAsBytes(buffer);
-          logger('NotoSansCJKsc-Medium.otf copied');
         }
 
         await nativePlayer.setProperty("sub-fonts-dir", fontsDir);
@@ -149,7 +146,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
     try {
       final storage = useStorageStore().findById(file.storageId);
       final auth = storage?.getAuth();
-      logger('Open file: $file');
       await player.open(
         Media(
           file.storageType == StorageType.ftp
@@ -160,7 +156,7 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
         play: autoPlay,
       );
     } catch (e) {
-      logger('Error initializing player: $e');
+      // ignore
     }
 
     isInitializing.value = false;
@@ -181,8 +177,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
       }
 
       if (file != null && player.state.duration != Duration.zero) {
-        logger(
-            'Save progress: ${file.name}, position: ${player.state.position}, duration: ${player.state.duration}');
         useHistoryStore().add(Progress(
           dateTime: DateTime.now().toUtc(),
           position: player.state.position,
@@ -207,19 +201,15 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
               (progress.duration.inMilliseconds -
                       progress.position.inMilliseconds) >
                   5000) {
-            logger(
-                'Resume progress: ${file.name} position: ${progress.position} duration: ${progress.duration}');
             await player.seek(progress.position);
           }
         }
       }
       // 设置字幕
       if (externalSubtitles!.isNotEmpty) {
-        logger('Set external subtitle: ${externalSubtitles[0]}');
         final uri = file?.storageType == StorageType.ftp
             ? '${mediaStream.url}/${externalSubtitles[0].uri}'
             : externalSubtitles[0].uri;
-        logger('External subtitle uri: $uri');
         await player.setSubtitleTrack(
           SubtitleTrack.uri(
             uri,
@@ -227,8 +217,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
           ),
         );
       } else if (subtitles.length > 1) {
-        logger(
-            'Set subtitle: ${subtitles[1].title ?? subtitles[1].language ?? subtitles[1].id}');
         await player.setSubtitleTrack(subtitles[1]);
       } else {
         await player.setSubtitleTrack(SubtitleTrack.no());
@@ -265,7 +253,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
   }, [volume, isMuted]);
 
   useEffect(() {
-    logger('$repeat');
     if (repeat == Repeat.one) {
       player.setPlaylistMode(PlaylistMode.loop);
     } else {
@@ -299,8 +286,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
     }
 
     if (file != null && player.state.duration != Duration.zero) {
-      logger(
-          'Save progress: ${file.name}, position: ${player.state.position}, duration: ${player.state.duration}');
       useHistoryStore().add(Progress(
         dateTime: DateTime.now().toUtc(),
         position: player.state.position,
@@ -342,7 +327,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
     final nativePlayer = player.platform;
     if (nativePlayer is NativePlayer && file?.type == ContentType.video) {
       await nativePlayer.command(['frame-back-step']);
-      logger('Step backward');
     }
   }
 
@@ -350,7 +334,6 @@ MediaKitPlayer useMediaKitPlayer(BuildContext context) {
     final nativePlayer = player.platform;
     if (nativePlayer is NativePlayer && file?.type == ContentType.video) {
       await nativePlayer.command(['frame-step']);
-      logger('Step forward');
     }
   }
 

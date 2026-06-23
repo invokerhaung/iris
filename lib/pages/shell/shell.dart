@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_zustand/flutter_zustand.dart';
+import 'package:iris/pages/explore/explore_page.dart';
 import 'package:iris/pages/home/home_page.dart';
 import 'package:iris/pages/player/player_view.dart';
 import 'package:iris/pages/settings/settings_page.dart';
@@ -28,6 +29,11 @@ class Shell extends HookWidget {
         label: t.files,
       ),
       NavigationDestination(
+        icon: const Icon(Icons.explore_outlined),
+        selectedIcon: const Icon(Icons.explore_rounded),
+        label: '发现',
+      ),
+      NavigationDestination(
         icon: const Icon(Icons.cloud_outlined),
         selectedIcon: const Icon(Icons.cloud_rounded),
         label: t.sources,
@@ -47,6 +53,7 @@ class Shell extends HookWidget {
             index: currentTab,
             children: const [
               HomePage(),
+              ExplorePage(),
               SourcesPage(),
               SettingsPage(),
             ],

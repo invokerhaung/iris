@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'package:iris/utils/logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'network/network_factory.dart';
 
 class Release {
   final String version;
@@ -28,7 +28,6 @@ Future<Release?> getLatestRelease() async {
   } else if (Platform.isAndroid) {
     platform = 'android';
   } else {
-    logger('Unsupported platform');
     return null;
   }
 
@@ -38,7 +37,7 @@ Future<Release?> getLatestRelease() async {
     const api = 'https://api.github.com/repos/nini22P/iris/releases/latest';
 
     try {
-      final response = await http.get(Uri.parse(api));
+      final response = await NetworkFactory.instance.get(api);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -72,11 +71,9 @@ Future<Release?> getLatestRelease() async {
           return null;
         }
       } else {
-        logger('Failed to load latest release: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      logger('Error fetching latest release: $e');
       return null;
     }
   } else {

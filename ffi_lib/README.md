@@ -105,11 +105,7 @@ go build -buildmode=c-shared \
 
 ### 日志系统
 
-| 函数 | 说明 |
-|------|------|
-| `LogInit(path)` | 初始化日志文件 |
-| `LogSetEnabled(enabled)` | 启用/禁用日志 |
-| `LogClose()` | 关闭日志文件 |
+日志系统在库加载时自动初始化，无需手动调用。日志文件输出到调用程序同目录，文件名为 `<程序名>.log`。进程退出时自动关闭日志文件。
 
 ### Analyzer (解析引擎)
 
@@ -163,33 +159,55 @@ import 'package:ffi/ffi.dart';
 // 加载动态库
 final dylib = DynamicLibrary.open('legado_ffi.dll');
 
-// 定义函数类型
-typedef LogInitNative = Void Function(Pointer<Utf8>);
-typedef LogInitDart = void Function(Pointer<Utf8>);
+// 日志系统在库加载时自动初始化，无需手动调用
+// 日志文件：与调用程序同目录，文件名为 <程序名>.log
 
-// 获取函数
-final logInit = dylib.lookupFunction<LogInitNative, LogInitDart>('LogInit');
+// 使用示例：创建解析器并获取元素
+typedef AnalyzerNewNative = Int64 Function(Int64, Int64);
+typedef AnalyzerNewDart = int Function(int, int);
+final analyzerNew = dylib.lookupFunction<AnalyzerNewNative, AnalyzerNewDart>('AnalyzerNew');
 
-// 调用
-final path = 'legado_ffi.log'.toNativeUtf8();
-logInit(path);
-malloc.free(path);
+typedef SetContentNative = Pointer<Utf8> Function(Int64, Pointer<Utf8>, Pointer<Utf8>);
+typedef SetContentDart = Pointer<Utf8> Function(int, Pointer<Utf8>, Pointer<Utf8>);
+final setContent = dylib.lookupFunction<SetContentNative, SetContentDart>('AnalyzerSetContent');
+
+typedef GetElementsNative = Pointer<Utf8> Function(Int64, Pointer<Utf8>);
+typedef GetElementsDart = Pointer<Utf8> Function(int, Pointer<Utf8>);
+final getElements = dylib.lookupFunction<GetElementsNative, GetElementsDart>('AnalyzerGetElements');
+
+typedef FreeStringNative = Void Function(Pointer<Utf8>);
+typedef FreeStringDart = void Function(Pointer<Utf8>);
+final freeString = dylib.lookupFunction<FreeStringNative, FreeStringDart>('FreeString');
+
+// 调用示例
+final analyzerId = analyzerNew(0, 0);
+final content = '<html><body><ul><li>item1</li><li>item2</li></ul></body></html>'.toNativeUtf8();
+final baseUrl = 'https://example.com'.toNativeUtf8();
+setContent(analyzerId, content, baseUrl);
+
+final rule = '@css:li'.toNativeUtf8();
+final resultPtr = getElements(analyzerId, rule);
+final result = resultPtr.toDartString(); // JSON 数组: ["<li>item1</li>","<li>item2</li>"]
+
+// 释放内存
+malloc.free(content);
+malloc.free(baseUrl);
+malloc.free(rule);
+freeString(resultPtr);
 ```
 
 ## 日志调试
 
-1. 初始化日志：
-   ```dart
-   logInit('legado_ffi.log'.toNativeUtf8());
-   ```
+日志系统自动初始化，无需手动调用任何函数。
 
-2. 运行 Flutter 应用
+1. 运行 Flutter 应用
 
-3. 查看日志文件 `legado_ffi.log`，格式：
+2. 查看日志文件 `<程序名>.log`（与可执行文件同目录），格式：
    ```
+   [LEGADO] 2024/01/01 12:00:00 [INFO] 日志初始化完成，文件: /path/to/app.log
    [LEGADO] 2024/01/01 12:00:00 [INFO] AnalyzerNew: 创建成功, id=1
-   [LEGADO] 2024/01/01 12:00:00 [DEBUG] AnalyzerGetString(id=1, rule=h1@text)
-   [LEGADO] 2024/01/01 12:00:00 [DEBUG] AnalyzerGetString: result="Hello" (耗时 1.234ms)
+   [LEGADO] 2024/01/01 12:00:00 [DEBUG] AnalyzerGetElements(id=1, rule=@css:li)
+   [LEGADO] 2024/01/01 12:00:00 [DEBUG] AnalyzerGetElements: 输入 rule=@css:li, 输出 ["<li>item1</li>","<li>item2</li>"] (耗时 1.234ms)
    ```
 
 ## 注意事项
@@ -198,3 +216,4 @@ malloc.free(path);
 2. **字符串编码**：所有字符串使用 UTF-8 编码
 3. **线程安全**：所有函数都是线程安全的
 4. **错误处理**：出错时返回空字符串，详细错误信息写入日志
+5. **日志系统**：库加载时自动初始化，无需手动调用；进程退出时自动关闭日志文件

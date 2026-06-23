@@ -4,7 +4,6 @@ import 'package:flutter_zustand/flutter_zustand.dart';
 import 'package:iris/models/progress.dart';
 import 'package:iris/models/store/history_state.dart';
 import 'package:iris/store/persistent_store.dart';
-import 'package:iris/utils/logger.dart';
 
 class HistoryStore extends PersistentStore<HistoryState> {
   HistoryStore() : super(HistoryState());
@@ -34,7 +33,6 @@ class HistoryStore extends PersistentStore<HistoryState> {
 
   @override
   Future<HistoryState?> load() async {
-    logger('Loading HistoryState');
     try {
       AndroidOptions getAndroidOptions() => const AndroidOptions(
             encryptedSharedPreferences: true,
@@ -46,7 +44,7 @@ class HistoryStore extends PersistentStore<HistoryState> {
         return HistoryState.fromJson(json.decode(historyState));
       }
     } catch (e) {
-      logger('Error loading HistoryState: $e');
+      // ignore
     }
     return null;
   }
@@ -62,7 +60,7 @@ class HistoryStore extends PersistentStore<HistoryState> {
       await storage.write(
           key: 'history_state', value: json.encode(state.toJson()));
     } catch (e) {
-      logger('Error saving HistoryState: $e');
+      // ignore
     }
   }
 }

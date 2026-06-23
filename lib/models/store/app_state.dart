@@ -55,6 +55,9 @@ abstract class AppState with _$AppState {
     @Default(ScreenOrientation.device) ScreenOrientation orientation,
     @Default(0) int currentTab,
     @Default(false) bool showPlayer,
+    @Default(false) bool enableProxy,       // 启用代理
+    @Default('127.0.0.1') String proxyHost, // 代理地址
+    @Default(7890) int proxyPort,           // 代理端口
   }) = _AppState;
 
   factory AppState.fromJson(Map<String, dynamic> json) =>

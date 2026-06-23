@@ -13,7 +13,6 @@ import 'package:iris/pages/shell/shell.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/store/use_play_queue_store.dart';
 import 'package:iris/theme.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:iris/utils/request_storage_permission.dart';
 import 'package:media_kit/media_kit.dart';
@@ -25,7 +24,6 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'globals.dart' as globals;
 
 void main(List<String> arguments) async {
-  logger('arguments: $arguments');
   globals.arguments = arguments;
 
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +51,6 @@ void main(List<String> arguments) async {
   final initUri = await appLinks.getInitialLinkString();
 
   if (initUri != null) {
-    logger('initUri: $initUri');
     globals.initUri = initUri;
   }
 
@@ -109,7 +106,6 @@ class MyApp extends HookWidget {
     useEffect(() {
       () async {
         if (uri != null && globals.initUri != uri) {
-          logger('Uri: $uri');
           if (Platform.isAndroid) {
             final file = await SafUtil().documentFileFromUri(uri, false);
             if (file != null) {

@@ -3,7 +3,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:fvp/fvp.dart';
 import 'package:iris/models/player.dart';
 import 'package:iris/utils/get_localizations.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
@@ -47,8 +46,6 @@ class AudioTrackList extends HookWidget {
               tileColor:
                   player.audio == audio ? Theme.of(context).hoverColor : null,
               onTap: () {
-                logger(
-                    'Set audio track: ${audio.title ?? audio.language ?? audio.id}');
                 player.player.setAudioTrack(audio);
                 Navigator.of(context).pop();
               },
@@ -79,7 +76,6 @@ class AudioTrackList extends HookWidget {
             tileColor:
                 activeAudioTracks.isEmpty ? Theme.of(context).hoverColor : null,
             onTap: () {
-              logger('Set audio track: ${t.off}');
               player.controller.setAudioTracks([]);
               Navigator.of(context).pop();
             },
@@ -106,8 +102,6 @@ class AudioTrackList extends HookWidget {
                   ? Theme.of(context).hoverColor
                   : null,
               onTap: () {
-                logger(
-                    'Set audio track: ${audio.metadata['title'] ?? audio.metadata['language'] ?? audios.indexOf(audio).toString()}');
                 player.controller.setAudioTracks([audios.indexOf(audio)]);
                 Navigator.of(context).pop();
               },

@@ -8,7 +8,6 @@ import 'package:iris/hooks/use_volume.dart';
 import 'package:iris/models/player.dart';
 import 'package:iris/store/use_app_store.dart';
 import 'package:iris/store/use_player_ui_store.dart';
-import 'package:iris/utils/logger.dart';
 import 'package:iris/utils/platform.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -199,7 +198,6 @@ Gesture useGesture({
       final startDx = details.globalPosition.dx;
 
       if (startDx < edgeDeadZone || startDx > screenSize.width - edgeDeadZone) {
-        logger("Edge swipe detected. Ignoring for system navigation.");
         return;
       }
 

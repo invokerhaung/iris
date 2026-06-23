@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:iris/widgets/popups/settings/about.dart';
 import 'package:iris/widgets/popups/settings/general.dart';
 import 'package:iris/widgets/popups/settings/dependencies.dart';
+import 'package:iris/widgets/popups/settings/network.dart';
 import 'package:iris/widgets/popups/settings/play.dart';
 import 'package:iris/utils/get_localizations.dart';
 
@@ -30,6 +31,7 @@ class Settings extends HookWidget {
     List<ITab> tabs = [
       ITab(title: t.general, child: const General()),
       ITab(title: t.play, child: const Play()),
+      ITab(title: '网络', child: const Network()),
       ITab(title: t.about, child: const About()),
       ITab(title: t.dependencies, child: const Dependencies()),
     ];

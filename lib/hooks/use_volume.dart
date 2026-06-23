@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
-import 'package:iris/utils/logger.dart';
 
 ValueNotifier<double?> useVolume(bool isGesture) {
   final volume = useState<double?>(null);
@@ -13,7 +12,7 @@ ValueNotifier<double?> useVolume(bool isGesture) {
         volume.value = await FlutterVolumeController.getVolume();
       }();
     } catch (e) {
-      logger('Error getting volume: $e');
+      // ignore
     }
     return () {
       volume.value = null;
@@ -26,7 +25,7 @@ ValueNotifier<double?> useVolume(bool isGesture) {
         FlutterVolumeController.setVolume(volume.value!);
       }
     } catch (e) {
-      logger('Error setting volume: $e');
+      // ignore
     }
     return;
   }, [volume.value]);
